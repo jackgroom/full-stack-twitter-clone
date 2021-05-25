@@ -1,13 +1,17 @@
 const express = require('express');
 const cors = require('cors');
 const monk = require('monk');
+const rateLimit = require('express-rate-limit');
+const Filter = require('bad-words');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const db = monk('localhost/meower');
+const db = monk(process.env.MOGNO_URI || 'localhost/meower');
 const mews = db.get('mews');
+
+const filter = new Filter();
 
 app.get('/mews', (request, response) => {
   mews.find().then((mews) => {
@@ -24,6 +28,13 @@ function isValidMew(mew) {
   );
 }
 
+app.use(
+  rateLimit({
+    windowMs: 30 * 1000, // every 30 seconds
+    max: 1, // limit each ip to 100 requests per windowMs
+  })
+);
+
 app.get('/', (request, response) => {
   response.json({
     message: 'Meower 😹',
@@ -33,8 +44,8 @@ app.get('/', (request, response) => {
 app.post('/mews', (request, response) => {
   if (isValidMew(request.body)) {
     const mew = {
-      name: request.body.name.toString(),
-      content: request.body.content.toString(),
+      name: filter.clean(request.body.name.toString()),
+      content: filter.clean(request.body.content.toString()),
       created: new Date(),
     };
     mews.insert(mew).then((createdMew) => {
